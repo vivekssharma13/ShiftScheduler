@@ -15,20 +15,6 @@ function sortIsoDates(set) {
   return Array.from(set).sort();
 }
 
-function isoForYmd(y, m, d) {
-  const mm = String(m).padStart(2, "0");
-  const dd = String(d).padStart(2, "0");
-  return `${y}-${mm}-${dd}`;
-}
-
-function monthBounds({ year, monthIndex }) {
-  const startIso = isoForYmd(year, monthIndex + 1, 1);
-  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
-  const endIso = isoForYmd(year, monthIndex + 1, lastDay);
-  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-  return { startIso, endIso, monthKey };
-}
-
 function dayName(isoDate) {
   return new Date(isoDate).toLocaleDateString(undefined, { weekday: "short" });
 }
@@ -97,32 +83,17 @@ export default function HolidaysPage() {
     refreshHistory,
   } = useSchedule();
 
-  const [holidayInput, setHolidayInput] = useState("");
   const [historyMonthInput, setHistoryMonthInput] = useState("");
   const [historyFile, setHistoryFile] = useState(null);
   const [historyMsg, setHistoryMsg] = useState(null);
   const [holidaysCalOpen, setHolidaysCalOpen] = useState(false);
   const [leavesCalOpenByEmployeeId, setLeavesCalOpenByEmployeeId] = useState({});
-  const [leaveInputs, setLeaveInputs] = useState(() => {
-    const obj = {};
-    for (const e of EMPLOYEES) obj[e.id] = "";
-    return obj;
-  });
 
   const holidaysSorted = useMemo(() => sortIsoDates(nationalHolidays), [nationalHolidays]);
 
-  const bounds = useMemo(() => monthBounds(month), [month.year, month.monthIndex]);
-
   useEffect(() => {
-    // Avoid carrying a previous month date in the inputs.
-    setHolidayInput("");
     setHolidaysCalOpen(false);
     setLeavesCalOpenByEmployeeId({});
-    setLeaveInputs(() => {
-      const obj = {};
-      for (const e of EMPLOYEES) obj[e.id] = "";
-      return obj;
-    });
   }, [month.year, month.monthIndex]);
 
   function isValidMonthKey(value) {
@@ -166,23 +137,6 @@ export default function HolidaysPage() {
         <div className="split">
           <div>
             <h2 className="h">National holidays</h2>
-            <div className="row">
-              <input
-                className="input"
-                type="date"
-                value={holidayInput}
-                min={bounds.startIso}
-                max={bounds.endIso}
-                onChange={(e) => {
-                  const iso = e.target.value;
-                  setHolidayInput(iso);
-                  if (!iso) return;
-                  addNationalHoliday(iso);
-                  setHolidayInput("");
-                }}
-              />
-            </div>
-
             <details
               className="dropdown"
               open={holidaysCalOpen}
@@ -253,23 +207,6 @@ export default function HolidaysPage() {
                         <div className="role">{e.role}</div>
                       </div>
                       <div className="tag">Weekly off: {e.weeklyOff}</div>
-                    </div>
-
-                    <div className="row">
-                      <input
-                        className="input"
-                        type="date"
-                        value={leaveInputs[e.id]}
-                        min={bounds.startIso}
-                        max={bounds.endIso}
-                        onChange={(ev) => {
-                          const iso = ev.target.value;
-                          setLeaveInputs((prev) => ({ ...prev, [e.id]: iso }));
-                          if (!iso) return;
-                          addEmployeeLeave(e.id, iso);
-                          setLeaveInputs((prev) => ({ ...prev, [e.id]: "" }));
-                        }}
-                      />
                     </div>
 
                     <details
