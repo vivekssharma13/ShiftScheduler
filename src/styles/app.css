@@ -629,3 +629,80 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .app {
+    width: calc(100% - 20px);
+    padding: 18px 0 26px;
+  }
+
+  .top {
+    padding: 12px 12px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .row {
+    align-items: stretch;
+  }
+
+  .actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .actions .btn {
+    flex: 1 1 140px;
+  }
+
+  .input {
+    width: 100%;
+    font-size: 16px;
+  }
+
+  .btn {
+    font-size: 14px;
+  }
+
+  .listItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .leaveTop {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .calendar {
+    min-width: 760px;
+    gap: 8px;
+  }
+
+  .day,
+  .day.blank {
+    min-height: 148px;
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .shift {
+    padding: 6px;
+  }
+
+  .chip {
+    padding: 5px 8px;
+  }
+
+  .peopleTable {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .peopleHeader,
+  .peopleRow {
+    min-width: 560px;
+  }
+}
