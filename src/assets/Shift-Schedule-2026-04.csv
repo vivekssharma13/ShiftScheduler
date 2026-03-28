@@ -1,0 +1,70 @@
+Date,Day,A Shift,B Shift,C Shift,National Holiday,Comp Off,Weekly Off,Leave
+2026-04-01,Wed,PRD,"TEJ, ISK",AZM,No,"VLD, EKR, SAI, DSV",,
+2026-04-02,Thu,EKR,"VLD, ISK, SAI","AZM, DSV",No,"TEJ, PRD",,
+2026-04-03,Fri,"PRD, EKR","VLD, TEJ, ISK, SAI","AZM, DSV",Yes,,,
+2026-04-04,Sat,PRD,"TEJ, SAI",AZM,No,,"VLD, EKR, ISK, DSV",
+2026-04-05,Sun,DSV,"VLD, ISK",EKR,No,,"AZM, TEJ, SAI, PRD",
+2026-04-06,Mon,DSV,"VLD, TEJ, SAI","PRD, EKR",No,"AZM, ISK",,
+2026-04-07,Tue,"AZM, DSV","VLD, TEJ, ISK, SAI","PRD, EKR",No,,,
+2026-04-08,Wed,"AZM, DSV","VLD, TEJ, ISK, SAI","PRD, EKR",No,,,
+2026-04-09,Thu,"AZM, DSV","VLD, TEJ, ISK, SAI","PRD, EKR",No,,,
+2026-04-10,Fri,"AZM, DSV","VLD, TEJ, ISK, SAI","PRD, EKR",No,,,
+2026-04-11,Sat,AZM,"TEJ, SAI",PRD,No,,"VLD, EKR, ISK, DSV",
+2026-04-12,Sun,EKR,"VLD, DSV",ISK,No,,"AZM, TEJ, SAI, PRD",
+2026-04-13,Mon,"PRD, EKR","AZM, VLD, TEJ, DSV","SAI, ISK",No,,,
+2026-04-14,Tue,"PRD, EKR","AZM, VLD, TEJ, DSV","SAI, ISK",No,,,
+2026-04-15,Wed,"PRD, EKR","AZM, VLD, TEJ, DSV","SAI, ISK",No,,,
+2026-04-16,Thu,"PRD, EKR","AZM, VLD, TEJ, DSV","SAI, ISK",No,,,
+2026-04-17,Fri,"PRD, EKR","AZM, VLD, TEJ, DSV","SAI, ISK",No,,,
+2026-04-18,Sat,PRD,"AZM, TEJ",SAI,No,,"VLD, EKR, ISK, DSV",
+2026-04-19,Sun,DSV,"EKR, ISK",VLD,No,,"AZM, TEJ, SAI, PRD",
+2026-04-20,Mon,"AZM, DSV","EKR, ISK, SAI, PRD","TEJ, VLD",No,,,
+2026-04-21,Tue,"AZM, DSV","EKR, ISK, SAI, PRD","TEJ, VLD",No,,,
+2026-04-22,Wed,"AZM, DSV","EKR, ISK, SAI, PRD","TEJ, VLD",No,,,
+2026-04-23,Thu,"AZM, DSV","EKR, ISK, SAI, PRD","TEJ, VLD",No,,,
+2026-04-24,Fri,"AZM, DSV","EKR, ISK, SAI, PRD","TEJ, VLD",No,,,
+2026-04-25,Sat,AZM,"SAI, PRD",TEJ,No,,"VLD, EKR, ISK, DSV",
+2026-04-26,Sun,EKR,"VLD, ISK",DSV,No,,"AZM, TEJ, SAI, PRD",
+2026-04-27,Mon,"SAI, EKR","AZM, VLD, TEJ, ISK","PRD, DSV",No,,,
+2026-04-28,Tue,"SAI, EKR","AZM, VLD, TEJ, ISK","PRD, DSV",No,,,
+2026-04-29,Wed,"SAI, EKR","AZM, VLD, TEJ, ISK","PRD, DSV",No,,,
+2026-04-30,Thu,"SAI, EKR","AZM, VLD, TEJ, ISK","PRD, DSV",No,,,
+
+Type,Message
+Warning,History balancing not used (no prior CSVs found in public/history).
+Warning,2026-04-01: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-04: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-05: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-05: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-06: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-07: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-08: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-09: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-10: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-11: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-11: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-12: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-12: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-13: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-14: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-15: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-16: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-17: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-18: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-18: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-19: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-19: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-20: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-21: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-22: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-23: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-24: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-25: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-25: B shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-26: C shift is staffed with 1 employee (emergency). Target is 2.
+Warning,2026-04-26: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-27: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-28: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-29: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,2026-04-30: C shift has no Lead/Senior. Allowed only in emergency (when none are available).
+Warning,"Note: The scheduler keeps shifts continuous for the full week per employee. If comp-off choices would break minimum staffing, it warns so you can adjust manually."
