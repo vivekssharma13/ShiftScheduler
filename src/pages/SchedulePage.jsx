@@ -20,30 +20,6 @@ function dayName(isoDate) {
   return new Date(isoDate).toLocaleDateString(undefined, { weekday: "short" });
 }
 
-function DragChip({ employeeId, fromShift, isoDate, readOnly }) {
-  return (
-    <div
-      className="chip"
-      draggable={!readOnly}
-      onClick={readOnly ? undefined : undefined}
-      onDragStart={
-        readOnly
-          ? undefined
-          : (e) => {
-              e.dataTransfer.setData(
-                "application/json",
-                JSON.stringify({ employeeId, fromShift, isoDate })
-              );
-              e.dataTransfer.effectAllowed = "move";
-            }
-      }
-      title={readOnly ? undefined : "Drag to move"}
-    >
-      {employeeId}
-    </div>
-  );
-}
-
 function ordinal(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return String(n);
