@@ -53,6 +53,11 @@ export default function SchedulePage() {
 
   const readOnly = Boolean(historyMonthKey);
 
+  useEffect(() => {
+    if (readOnly) return;
+    if (!generated?.scheduleByDate) nav("/holidays", { replace: true });
+  }, [readOnly, generated?.scheduleByDate, nav]);
+
   function beginTapMove(payload) {
     if (readOnly) return;
     setTapMove(payload);
@@ -288,7 +293,7 @@ export default function SchedulePage() {
 
   return (
     <Layout
-      title="2) Review & edit schedule"
+      title="Review & edit schedule"
       subtitle={
         readOnly
           ? `Viewing uploaded history: ${historyMonthKey}`

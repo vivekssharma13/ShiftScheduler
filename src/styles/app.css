@@ -111,6 +111,11 @@ h1 {
   background: rgba(0, 0, 0, 0.14);
 }
 
+.step.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .step.active {
   border-color: var(--line);
   background: var(--panel-2);

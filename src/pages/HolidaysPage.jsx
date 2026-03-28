@@ -101,10 +101,7 @@ export default function HolidaysPage() {
   }
 
   return (
-    <Layout
-      title="1) Select holidays"
-      subtitle="Add national holidays and employee leaves for the selected month."
-    >
+    <Layout>
       <section className="panel">
         <div className="row">
           <label className="label">
@@ -116,10 +113,6 @@ export default function HolidaysPage() {
               onChange={(e) => setMonthFromInput(e.target.value)}
             />
           </label>
-
-          <div className="muted" style={{ alignSelf: "end" }}>
-            History: {historyStatus.loading ? "loading…" : `${historyLibraryMonths.length} uploaded`}
-          </div>
 
           <div className="actions">
             <button
@@ -272,6 +265,9 @@ export default function HolidaysPage() {
 
           <div>
             <h2 className="h">History uploads</h2>
+            <p className="muted" style={{ marginTop: 6 }}>
+              History: {historyStatus.loading ? "loading…" : `${historyLibraryMonths.length} uploaded`}
+            </p>
             <p className="muted">
               Upload prior month CSVs to balance future schedules. Files are stored in this browser
               (survive refresh).

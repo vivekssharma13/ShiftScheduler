@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { buildScheduleCsv, downloadCsv } from "../utils/csv.js";
@@ -15,6 +15,10 @@ export default function ExportPage() {
 
   const canDownload = Boolean(generated.scheduleByDate);
 
+  useEffect(() => {
+    if (!generated?.scheduleByDate) nav("/holidays", { replace: true });
+  }, [generated?.scheduleByDate, nav]);
+
   const summary = useMemo(() => {
     const warningCount = generated.warnings?.length ?? 0;
     const errorCount = generated.errors?.length ?? 0;
@@ -23,7 +27,7 @@ export default function ExportPage() {
 
   return (
     <Layout
-      title="3) Download"
+      title="Download"
       subtitle="Review the final schedule summary and export to CSV."
     >
       <section className="panel">
