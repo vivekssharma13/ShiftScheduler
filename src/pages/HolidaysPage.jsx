@@ -101,6 +101,8 @@ export default function HolidaysPage() {
   const [historyMonthInput, setHistoryMonthInput] = useState("");
   const [historyFile, setHistoryFile] = useState(null);
   const [historyMsg, setHistoryMsg] = useState(null);
+  const [holidaysCalOpen, setHolidaysCalOpen] = useState(false);
+  const [leavesCalOpenByEmployeeId, setLeavesCalOpenByEmployeeId] = useState({});
   const [leaveInputs, setLeaveInputs] = useState(() => {
     const obj = {};
     for (const e of EMPLOYEES) obj[e.id] = "";
@@ -114,6 +116,8 @@ export default function HolidaysPage() {
   useEffect(() => {
     // Avoid carrying a previous month date in the inputs.
     setHolidayInput("");
+    setHolidaysCalOpen(false);
+    setLeavesCalOpenByEmployeeId({});
     setLeaveInputs(() => {
       const obj = {};
       for (const e of EMPLOYEES) obj[e.id] = "";
@@ -179,8 +183,14 @@ export default function HolidaysPage() {
               />
             </div>
 
-            <details className="dropdown">
-              <summary className="dropdownSummary">Show calendar</summary>
+            <details
+              className="dropdown"
+              open={holidaysCalOpen}
+              onToggle={(e) => setHolidaysCalOpen(Boolean(e.currentTarget.open))}
+            >
+              <summary className="dropdownSummary">
+                {holidaysCalOpen ? "Hide calendar" : "Show calendar"}
+              </summary>
               <div className="row" style={{ marginTop: 10 }}>
                 <button
                   type="button"
@@ -262,8 +272,17 @@ export default function HolidaysPage() {
                       />
                     </div>
 
-                    <details className="dropdown">
-                      <summary className="dropdownSummary">Show calendar</summary>
+                    <details
+                      className="dropdown"
+                      open={Boolean(leavesCalOpenByEmployeeId[e.id])}
+                      onToggle={(ev) => {
+                        const open = Boolean(ev.currentTarget.open);
+                        setLeavesCalOpenByEmployeeId((prev) => ({ ...prev, [e.id]: open }));
+                      }}
+                    >
+                      <summary className="dropdownSummary">
+                        {leavesCalOpenByEmployeeId[e.id] ? "Hide calendar" : "Show calendar"}
+                      </summary>
                       <div className="row" style={{ marginTop: 10 }}>
                         <button
                           type="button"
