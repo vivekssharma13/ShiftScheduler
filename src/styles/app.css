@@ -427,6 +427,29 @@ h1 {
   background: rgba(0, 0, 0, 0.14);
 }
 
+.dropdown {
+  margin-top: 10px;
+}
+
+.dropdownSummary {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dropdownSummary::-webkit-details-marker {
+  display: none;
+}
+
 .miniCalHeader {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

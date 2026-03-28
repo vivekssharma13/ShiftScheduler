@@ -179,15 +179,18 @@ export default function HolidaysPage() {
               />
             </div>
 
-            <MonthGrid
-              month={month}
-              selectedSet={nationalHolidays}
-              ariaLabel="National holidays calendar"
-              onToggle={(iso) => {
-                if (nationalHolidays.has(iso)) removeNationalHoliday(iso);
-                else addNationalHoliday(iso);
-              }}
-            />
+            <details className="dropdown">
+              <summary className="dropdownSummary">Show calendar</summary>
+              <MonthGrid
+                month={month}
+                selectedSet={nationalHolidays}
+                ariaLabel="National holidays calendar"
+                onToggle={(iso) => {
+                  if (nationalHolidays.has(iso)) removeNationalHoliday(iso);
+                  else addNationalHoliday(iso);
+                }}
+              />
+            </details>
 
             {holidaysSorted.length === 0 ? (
               <p className="muted">No national holidays selected yet.</p>
@@ -243,15 +246,18 @@ export default function HolidaysPage() {
                       />
                     </div>
 
-                    <MonthGrid
-                      month={month}
-                      selectedSet={leaves}
-                      ariaLabel={`${e.id} leave calendar`}
-                      onToggle={(iso) => {
-                        if (leaves.has(iso)) removeEmployeeLeave(e.id, iso);
-                        else addEmployeeLeave(e.id, iso);
-                      }}
-                    />
+                    <details className="dropdown">
+                      <summary className="dropdownSummary">Show calendar</summary>
+                      <MonthGrid
+                        month={month}
+                        selectedSet={leaves}
+                        ariaLabel={`${e.id} leave calendar`}
+                        onToggle={(iso) => {
+                          if (leaves.has(iso)) removeEmployeeLeave(e.id, iso);
+                          else addEmployeeLeave(e.id, iso);
+                        }}
+                      />
+                    </details>
 
                     {sorted.length === 0 ? (
                       <p className="muted">No leave dates.</p>
