@@ -8,8 +8,8 @@ export default function Layout({ title, subtitle, children }) {
       <header className="top">
         <div className="brand">
           <div className="badge">Shift Scheduler</div>
-          <div>
-            <h1>{title}</h1>
+          <div className="titles">
+            <h1 className="pageTitle">{title}</h1>
             {subtitle ? <p className="sub">{subtitle}</p> : null}
           </div>
         </div>
