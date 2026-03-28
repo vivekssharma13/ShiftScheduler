@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { EMPLOYEES } from "../constants/employees.js";
 import { useSchedule } from "../state/scheduleStore.js";
+import { eachDayOfMonth, toISODate } from "../utils/date.js";
 import { deleteHistoryMonth, saveHistoryCsv } from "../utils/historyDb.js";
 
 function formatMonthInput({ year, monthIndex }) {
@@ -26,6 +27,55 @@ function monthBounds({ year, monthIndex }) {
   const endIso = isoForYmd(year, monthIndex + 1, lastDay);
   const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
   return { startIso, endIso, monthKey };
+}
+
+function dayName(isoDate) {
+  return new Date(isoDate).toLocaleDateString(undefined, { weekday: "short" });
+}
+
+function MonthGrid({ month, selectedSet, onToggle, ariaLabel }) {
+  const gridDays = useMemo(() => {
+    const monthDays = eachDayOfMonth(month.year, month.monthIndex);
+    const firstDow = new Date(month.year, month.monthIndex, 1).getDay(); // 0=Sun
+    const days = [];
+    for (let i = 0; i < firstDow; i += 1) days.push(null);
+    for (const d of monthDays) days.push(toISODate(d));
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [month.year, month.monthIndex]);
+
+  return (
+    <div className="miniCal" role="grid" aria-label={ariaLabel}>
+      <div className="miniCalHeader" role="row">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d} className="miniCalDow" role="columnheader">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div className="miniCalGrid">
+        {gridDays.map((iso, idx) => {
+          if (!iso) return <div key={`blank-${idx}`} className="miniDay blank" role="gridcell" />;
+          const dayNum = Number(iso.slice(8));
+          const selected = selectedSet?.has(iso);
+          const cls = ["miniDay", selected ? "selected" : null].filter(Boolean).join(" ");
+          return (
+            <button
+              key={iso}
+              type="button"
+              className={cls}
+              onClick={() => onToggle(iso)}
+              title={`${iso} (${dayName(iso)})`}
+              aria-pressed={selected}
+            >
+              {dayNum}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function HolidaysPage() {
@@ -133,6 +183,16 @@ export default function HolidaysPage() {
               </button>
             </div>
 
+            <MonthGrid
+              month={month}
+              selectedSet={nationalHolidays}
+              ariaLabel="National holidays calendar"
+              onToggle={(iso) => {
+                if (nationalHolidays.has(iso)) removeNationalHoliday(iso);
+                else addNationalHoliday(iso);
+              }}
+            />
+
             {holidaysSorted.length === 0 ? (
               <p className="muted">No national holidays selected yet.</p>
             ) : (
@@ -193,6 +253,16 @@ export default function HolidaysPage() {
                         Add
                       </button>
                     </div>
+
+                    <MonthGrid
+                      month={month}
+                      selectedSet={leaves}
+                      ariaLabel={`${e.id} leave calendar`}
+                      onToggle={(iso) => {
+                        if (leaves.has(iso)) removeEmployeeLeave(e.id, iso);
+                        else addEmployeeLeave(e.id, iso);
+                      }}
+                    />
 
                     {sorted.length === 0 ? (
                       <p className="muted">No leave dates.</p>

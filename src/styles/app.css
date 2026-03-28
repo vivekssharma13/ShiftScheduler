@@ -414,6 +414,59 @@ h1 {
   font-size: 13px;
 }
 
+.miniCal {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.miniCalHeader {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.miniCalDow {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.miniCalGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.miniDay {
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.miniDay:hover {
+  border-color: rgba(110, 231, 255, 0.28);
+}
+
+.miniDay.selected {
+  border-color: rgba(110, 231, 255, 0.35);
+  background: rgba(110, 231, 255, 0.12);
+}
+
+.miniDay.blank {
+  border-color: transparent;
+  background: transparent;
+  cursor: default;
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
