@@ -199,7 +199,6 @@ export default function HolidaysPage() {
                         <div className="who">{e.id}</div>
                         <div className="role">{e.role}</div>
                       </div>
-                      <div className="tag">Weekly off: {e.weeklyOff}</div>
                     </div>
 
                     <details
