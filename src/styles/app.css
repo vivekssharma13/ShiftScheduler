@@ -39,10 +39,8 @@ a {
 }
 
 .top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  justify-items: center;
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -51,25 +49,31 @@ a {
   box-shadow: var(--shadow);
 }
 
-.brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
 
-.titles {
+.brandCentered {
   display: grid;
-  gap: 2px;
+  justify-items: center;
+  gap: 10px;
 }
 
-.badge {
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(110, 231, 255, 0.16), rgba(167, 139, 250, 0.18));
+.appName {
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  font-size: 18px;
+  padding: 8px 12px;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  font-weight: 850;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.16), rgba(167, 139, 250, 0.18));
+}
+
+.pageHead {
+  margin-top: 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .pageTitle {
@@ -94,6 +98,7 @@ h1 {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: center;
   color: var(--muted);
   font-size: 13px;
 }
@@ -103,7 +108,7 @@ h1 {
   border: 1px solid transparent;
   border-radius: 999px;
   text-decoration: none;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.14);
 }
 
 .step.active {
@@ -688,6 +693,10 @@ h1 {
 
   .top {
     padding: 12px 12px;
+  }
+
+  .appName {
+    font-size: 16px;
   }
 
   .pageTitle {
