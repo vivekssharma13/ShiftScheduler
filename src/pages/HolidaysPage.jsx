@@ -181,6 +181,22 @@ export default function HolidaysPage() {
 
             <details className="dropdown">
               <summary className="dropdownSummary">Show calendar</summary>
+              <div className="row" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={nationalHolidays.size === 0}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const all = Array.from(nationalHolidays);
+                    for (const iso of all) removeNationalHoliday(iso);
+                  }}
+                  title="Clear all selected holiday dates"
+                >
+                  Clear
+                </button>
+              </div>
               <MonthGrid
                 month={month}
                 selectedSet={nationalHolidays}
@@ -248,6 +264,22 @@ export default function HolidaysPage() {
 
                     <details className="dropdown">
                       <summary className="dropdownSummary">Show calendar</summary>
+                      <div className="row" style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={leaves.size === 0}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            const all = Array.from(leaves);
+                            for (const iso of all) removeEmployeeLeave(e.id, iso);
+                          }}
+                          title="Clear all selected leave dates"
+                        >
+                          Clear
+                        </button>
+                      </div>
                       <MonthGrid
                         month={month}
                         selectedSet={leaves}
