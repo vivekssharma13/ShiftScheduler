@@ -25,6 +25,7 @@ function DragChip({ employeeId, fromShift, isoDate, readOnly }) {
     <div
       className="chip"
       draggable={!readOnly}
+      onClick={readOnly ? undefined : undefined}
       onDragStart={
         readOnly
           ? undefined
@@ -69,10 +70,33 @@ export default function SchedulePage() {
   const [drillOpen, setDrillOpen] = useState(false);
   const [drill, setDrill] = useState({ employeeId: null, kind: null });
 
+  const [tapMove, setTapMove] = useState(null);
+
   const [historySchedule, setHistorySchedule] = useState(null);
   const [historyError, setHistoryError] = useState(null);
 
   const readOnly = Boolean(historyMonthKey);
+
+  function beginTapMove(payload) {
+    if (readOnly) return;
+    setTapMove(payload);
+  }
+
+  function clearTapMove() {
+    setTapMove(null);
+  }
+
+  function applyMoveTo({ toIsoDate, toShift }) {
+    if (!tapMove) return;
+    updateAssignment({
+      fromIsoDate: tapMove.isoDate,
+      toIsoDate,
+      fromShift: tapMove.fromShift,
+      toShift,
+      employeeId: tapMove.employeeId,
+    });
+    clearTapMove();
+  }
 
   const activeMonth = useMemo(() => {
     if (!historyMonthKey) return month;
@@ -134,6 +158,38 @@ export default function SchedulePage() {
     if (belowTarget) return "warn";
 
     return null;
+  }
+
+  function Chip({ employeeId, fromShift, isoDate }) {
+    const active = tapMove?.employeeId === employeeId && tapMove?.fromShift === fromShift && tapMove?.isoDate === isoDate;
+    return (
+      <div
+        className={active ? "chip active" : "chip"}
+        draggable={!readOnly}
+        onClick={
+          readOnly
+            ? undefined
+            : (e) => {
+                e.stopPropagation();
+                beginTapMove({ employeeId, fromShift, isoDate });
+              }
+        }
+        onDragStart={
+          readOnly
+            ? undefined
+            : (e) => {
+                e.dataTransfer.setData(
+                  "application/json",
+                  JSON.stringify({ employeeId, fromShift, isoDate })
+                );
+                e.dataTransfer.effectAllowed = "move";
+              }
+        }
+        title={readOnly ? undefined : "Tap to select, then tap destination (or drag)"}
+      >
+        {employeeId}
+      </div>
+    );
   }
 
   const gridDays = useMemo(() => {
@@ -371,6 +427,16 @@ export default function SchedulePage() {
                             <div
                               key={shift}
                               className={shift === SHIFT.C ? "shift night" : "shift"}
+                              onClick={
+                                readOnly
+                                  ? undefined
+                                  : (e) => {
+                                      if (!tapMove) return;
+                                      // Prevent opening the day modal when completing a tap-move.
+                                      e.stopPropagation();
+                                      applyMoveTo({ toIsoDate: isoDate, toShift: shift });
+                                    }
+                              }
                               onDragOver={
                                 readOnly
                                   ? undefined
@@ -393,18 +459,18 @@ export default function SchedulePage() {
                                         toShift: shift,
                                         employeeId: payload.employeeId,
                                       });
+                                      clearTapMove();
                                     }
                               }
                             >
                               <div className="shiftTitle">{SHIFT_LABEL[shift]}</div>
                               <div className="chipRow">
                                 {ids.map((id) => (
-                                  <DragChip
+                                  <Chip
                                     key={`${isoDate}-${shift}-${id}`}
                                     employeeId={id}
                                     fromShift={shift}
                                     isoDate={isoDate}
-                                    readOnly={readOnly}
                                   />
                                 ))}
                               </div>
@@ -453,14 +519,54 @@ export default function SchedulePage() {
 
               <div className="shifts" style={{ marginTop: 0 }}>
                 {SHIFT_ORDER.map((shift) => (
-                  <div key={`modal-${shift}`} className={shift === SHIFT.C ? "shift night" : "shift"}>
+                  <div
+                    key={`modal-${shift}`}
+                    className={shift === SHIFT.C ? "shift night" : "shift"}
+                    onClick={
+                      readOnly
+                        ? undefined
+                        : (e) => {
+                            if (!tapMove) return;
+                            e.stopPropagation();
+                            applyMoveTo({ toIsoDate: selected.isoDate, toShift: shift });
+                          }
+                    }
+                    onDragOver={
+                      readOnly
+                        ? undefined
+                        : (e) => {
+                            e.preventDefault();
+                          }
+                    }
+                    onDrop={
+                      readOnly
+                        ? undefined
+                        : (e) => {
+                            e.preventDefault();
+                            const raw = e.dataTransfer.getData("application/json");
+                            if (!raw) return;
+                            const payload = JSON.parse(raw);
+                            updateAssignment({
+                              fromIsoDate: payload.isoDate,
+                              toIsoDate: selected.isoDate,
+                              fromShift: payload.fromShift,
+                              toShift: shift,
+                              employeeId: payload.employeeId,
+                            });
+                            clearTapMove();
+                          }
+                    }
+                  >
                     <div className="shiftTitle">{SHIFT_LABEL[shift]}</div>
                     <div className="chipRow">
                       {(selected.assignments?.[shift] ?? []).length ? (
                         (selected.assignments?.[shift] ?? []).map((id) => (
-                          <div key={`modal-${selected.isoDate}-${shift}-${id}`} className="chip">
-                            {id}
-                          </div>
+                          <Chip
+                            key={`modal-${selected.isoDate}-${shift}-${id}`}
+                            employeeId={id}
+                            fromShift={shift}
+                            isoDate={selected.isoDate}
+                          />
                         ))
                       ) : (
                         <span className="muted">—</span>

@@ -43,6 +43,11 @@ a {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+
+.chip.active {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+}
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid var(--line);

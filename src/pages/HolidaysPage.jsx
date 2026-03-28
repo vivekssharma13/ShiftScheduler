@@ -169,18 +169,14 @@ export default function HolidaysPage() {
                 value={holidayInput}
                 min={bounds.startIso}
                 max={bounds.endIso}
-                onChange={(e) => setHolidayInput(e.target.value)}
-              />
-              <button
-                className="btn"
-                onClick={() => {
-                  if (!holidayInput) return;
-                  addNationalHoliday(holidayInput);
+                onChange={(e) => {
+                  const iso = e.target.value;
+                  setHolidayInput(iso);
+                  if (!iso) return;
+                  addNationalHoliday(iso);
                   setHolidayInput("");
                 }}
-              >
-                Add
-              </button>
+              />
             </div>
 
             <MonthGrid
@@ -237,21 +233,14 @@ export default function HolidaysPage() {
                         value={leaveInputs[e.id]}
                         min={bounds.startIso}
                         max={bounds.endIso}
-                        onChange={(ev) =>
-                          setLeaveInputs((prev) => ({ ...prev, [e.id]: ev.target.value }))
-                        }
-                      />
-                      <button
-                        className="btn"
-                        onClick={() => {
-                          const iso = leaveInputs[e.id];
+                        onChange={(ev) => {
+                          const iso = ev.target.value;
+                          setLeaveInputs((prev) => ({ ...prev, [e.id]: iso }));
                           if (!iso) return;
                           addEmployeeLeave(e.id, iso);
                           setLeaveInputs((prev) => ({ ...prev, [e.id]: "" }));
                         }}
-                      >
-                        Add
-                      </button>
+                      />
                     </div>
 
                     <MonthGrid
