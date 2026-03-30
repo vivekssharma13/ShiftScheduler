@@ -32,12 +32,22 @@ function ordinal(n) {
   return `${num}th`;
 }
 
+const EXTRA = {
+  LEAVE: "LEAVE",
+  COMPOFF: "COMPOFF",
+};
+
+const EXTRA_LABEL = {
+  [EXTRA.LEAVE]: "Leave",
+  [EXTRA.COMPOFF]: "Comp-off",
+};
+
 export default function SchedulePage() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const historyMonthKey = searchParams.get("history");
 
-  const { month, generated, generate, updateAssignment } = useSchedule();
+  const { month, generated, generate, updateAssignment, canUndo, canRedo, undoEdit, redoEdit } = useSchedule();
   const [selectedDate, setSelectedDate] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [issuesOpen, setIssuesOpen] = useState(false);
@@ -225,6 +235,7 @@ export default function SchedulePage() {
         B: 0,
         C: 0,
         compOffs: 0,
+        leaves: 0,
       };
     }
 
@@ -240,6 +251,7 @@ export default function SchedulePage() {
               B: 0,
               C: 0,
               compOffs: 0,
+              leaves: 0,
             };
           }
           statsById[id][shift] += 1;
@@ -256,9 +268,26 @@ export default function SchedulePage() {
             B: 0,
             C: 0,
             compOffs: 0,
+            leaves: 0,
           };
         }
         statsById[id].compOffs += 1;
+      }
+
+      for (const id of day.leaveEmployeeIds ?? []) {
+        if (!statsById[id]) {
+          statsById[id] = {
+            id,
+            name: id,
+            role: "—",
+            A: 0,
+            B: 0,
+            C: 0,
+            compOffs: 0,
+            leaves: 0,
+          };
+        }
+        statsById[id].leaves += 1;
       }
     }
 
@@ -277,6 +306,11 @@ export default function SchedulePage() {
     for (const day of days) {
       if (kind === "COMPOFF") {
         if ((day.compOffEmployeeIds ?? []).includes(employeeId)) out.push(day.isoDate);
+        continue;
+      }
+
+      if (kind === EXTRA.LEAVE) {
+        if ((day.leaveEmployeeIds ?? []).includes(employeeId)) out.push(day.isoDate);
         continue;
       }
 
@@ -320,6 +354,16 @@ export default function SchedulePage() {
             <button className="btn" onClick={() => setPeopleOpen(true)} disabled={!schedule}>
               People
             </button>
+            {!readOnly ? (
+              <>
+                <button className="btn" onClick={() => undoEdit()} disabled={!canUndo}>
+                  Undo
+                </button>
+                <button className="btn" onClick={() => redoEdit()} disabled={!canRedo}>
+                  Redo
+                </button>
+              </>
+            ) : null}
             <button
               className={errorCount > 0 ? "btn danger" : "btn"}
               onClick={() => setIssuesOpen(true)}
@@ -458,16 +502,75 @@ export default function SchedulePage() {
                             </div>
                           );
                         })}
+
+                        <div className="extras">
+                          {[EXTRA.LEAVE, EXTRA.COMPOFF].map((bucket) => {
+                            const ids =
+                              bucket === EXTRA.LEAVE
+                                ? day.leaveEmployeeIds ?? []
+                                : day.compOffEmployeeIds ?? [];
+                            return (
+                              <div
+                                key={`${isoDate}-${bucket}`}
+                                className="extraZone"
+                                onClick={
+                                  readOnly
+                                    ? undefined
+                                    : (e) => {
+                                        if (!tapMove) return;
+                                        e.stopPropagation();
+                                        applyMoveTo({ toIsoDate: isoDate, toShift: bucket });
+                                      }
+                                }
+                                onDragOver={
+                                  readOnly
+                                    ? undefined
+                                    : (e) => {
+                                        e.preventDefault();
+                                      }
+                                }
+                                onDrop={
+                                  readOnly
+                                    ? undefined
+                                    : (e) => {
+                                        e.preventDefault();
+                                        const raw = e.dataTransfer.getData("application/json");
+                                        if (!raw) return;
+                                        const payload = JSON.parse(raw);
+                                        updateAssignment({
+                                          fromIsoDate: payload.isoDate,
+                                          toIsoDate: isoDate,
+                                          fromShift: payload.fromShift,
+                                          toShift: bucket,
+                                          employeeId: payload.employeeId,
+                                        });
+                                        clearTapMove();
+                                      }
+                                }
+                              >
+                                <div className="shiftTitle">{EXTRA_LABEL[bucket]}</div>
+                                <div className="chipRow">
+                                  {ids.length ? (
+                                    ids.map((id) => (
+                                      <Chip
+                                        key={`${isoDate}-${bucket}-${id}`}
+                                        employeeId={id}
+                                        fromShift={bucket}
+                                        isoDate={isoDate}
+                                      />
+                                    ))
+                                  ) : (
+                                    <span className="muted">—</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       <div className="tiny">
                         Off: {day.weeklyOffEmployeeIds.join(", ") || "—"}
-                        {day.leaveEmployeeIds.length ? (
-                          <> · Leave: {day.leaveEmployeeIds.join(", ")}</>
-                        ) : null}
-                        {day.compOffEmployeeIds.length ? (
-                          <> · Comp-off: {day.compOffEmployeeIds.join(", ")}</>
-                        ) : null}
                       </div>
                     </div>
                   );
@@ -555,15 +658,74 @@ export default function SchedulePage() {
                     </div>
                   </div>
                 ))}
+
+                {[EXTRA.LEAVE, EXTRA.COMPOFF].map((bucket) => {
+                  const ids =
+                    bucket === EXTRA.LEAVE
+                      ? selected.leaveEmployeeIds ?? []
+                      : selected.compOffEmployeeIds ?? [];
+                  return (
+                    <div
+                      key={`modal-${bucket}`}
+                      className="shift compact"
+                      onClick={
+                        readOnly
+                          ? undefined
+                          : (e) => {
+                              if (!tapMove) return;
+                              e.stopPropagation();
+                              applyMoveTo({ toIsoDate: selected.isoDate, toShift: bucket });
+                            }
+                      }
+                      onDragOver={
+                        readOnly
+                          ? undefined
+                          : (e) => {
+                              e.preventDefault();
+                            }
+                      }
+                      onDrop={
+                        readOnly
+                          ? undefined
+                          : (e) => {
+                              e.preventDefault();
+                              const raw = e.dataTransfer.getData("application/json");
+                              if (!raw) return;
+                              const payload = JSON.parse(raw);
+                              updateAssignment({
+                                fromIsoDate: payload.isoDate,
+                                toIsoDate: selected.isoDate,
+                                fromShift: payload.fromShift,
+                                toShift: bucket,
+                                employeeId: payload.employeeId,
+                              });
+                              clearTapMove();
+                            }
+                      }
+                    >
+                      <div className="shiftTitle">{EXTRA_LABEL[bucket]}</div>
+                      <div className="chipRow">
+                        {ids.length ? (
+                          ids.map((id) => (
+                            <Chip
+                              key={`modal-${selected.isoDate}-${bucket}-${id}`}
+                              employeeId={id}
+                              fromShift={bucket}
+                              isoDate={selected.isoDate}
+                            />
+                          ))
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="details">
                 <div className="detailsLine">
                   Weekly off: {selected.weeklyOffEmployeeIds.join(", ") || "—"}
-                </div>
-                <div className="detailsLine">Leave: {selected.leaveEmployeeIds.join(", ") || "—"}</div>
-                <div className="detailsLine">
-                  Comp-off: {selected.compOffEmployeeIds.join(", ") || "—"}
                 </div>
               </div>
             </div>
@@ -584,6 +746,7 @@ export default function SchedulePage() {
                 <div role="columnheader">B</div>
                 <div role="columnheader">C</div>
                 <div role="columnheader">Comp-off</div>
+                <div role="columnheader">Leaves</div>
               </div>
 
               {peopleStats.map((p) => (
@@ -634,6 +797,16 @@ export default function SchedulePage() {
                       {p.compOffs}
                     </button>
                   </div>
+                  <div role="cell">
+                    <button
+                      className={p.leaves > 0 ? "countBtn" : "countBtn disabled"}
+                      onClick={() => (p.leaves > 0 ? openDrill(p.id, EXTRA.LEAVE) : null)}
+                      disabled={p.leaves <= 0}
+                      title={p.leaves > 0 ? "Show dates" : "No days"}
+                    >
+                      {p.leaves}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -644,7 +817,7 @@ export default function SchedulePage() {
           open={drillOpen}
           title={
             drill.employeeId && drill.kind
-              ? `${drill.employeeId} — ${drill.kind === "COMPOFF" ? "Comp-off" : SHIFT_LABEL[drill.kind]} days`
+              ? `${drill.employeeId} — ${drill.kind === "COMPOFF" ? "Comp-off" : drill.kind === EXTRA.LEAVE ? "Leave" : SHIFT_LABEL[drill.kind]} days`
               : "Details"
           }
           onClose={() => setDrillOpen(false)}

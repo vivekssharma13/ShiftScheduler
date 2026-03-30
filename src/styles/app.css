@@ -168,12 +168,16 @@ h1 {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   cursor: pointer;
-  transition: transform 160ms ease, background 160ms ease;
+  transition: transform 160ms ease, background 160ms ease, filter 160ms ease;
 }
 
 .btn:hover {
   transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.09);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0px) scale(0.99);
+  filter: brightness(1.05);
 }
 
 .btn:disabled {
@@ -382,6 +386,27 @@ h1 {
   margin-top: 10px;
   display: grid;
   gap: 8px;
+}
+
+.extras {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.extraZone {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 6px 8px;
+}
+
+.shift.compact {
+  padding: 6px 8px;
+}
+.step:active:not(.disabled) {
+  transform: scale(0.98);
 }
 
 .shift {
@@ -623,6 +648,9 @@ h1 {
 .countBtn:hover {
   text-decoration: underline;
 }
+.countBtn:active:not(:disabled):not(.disabled) {
+  transform: scale(0.98);
+}
 
 .countBtn:disabled,
 .countBtn.disabled {
@@ -648,6 +676,9 @@ h1 {
 
 .dateBtn:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+.dateBtn:active {
+  transform: scale(0.99);
 }
 
 .miniList {
@@ -771,6 +802,10 @@ h1 {
 
   .peopleHeader,
   .peopleRow {
-    min-width: 560px;
+    min-width: 640px;
+  }
+
+  .extras {
+    grid-template-columns: 1fr;
   }
 }
