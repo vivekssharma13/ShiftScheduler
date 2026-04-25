@@ -5,10 +5,24 @@ import { validateSchedule } from "../utils/validation.js";
 import { loadHistoryStats } from "../utils/history.js";
 import { listHistoryMonths } from "../utils/historyDb.js";
 import { ScheduleContext } from "./scheduleStore.js";
+import {
+  MAX_RANGE_MONTHS,
+  compareMonth,
+  isInRange,
+  monthKeyOf,
+  monthsInRange,
+  monthsInRangeCount,
+  parseMonthKey,
+} from "../utils/date.js";
 
 function defaultMonth() {
   const now = new Date();
   return { year: now.getFullYear(), monthIndex: now.getMonth() };
+}
+
+function defaultRange() {
+  const m = defaultMonth();
+  return { start: m, end: m };
 }
 
 function makeEmptyLeaves() {
@@ -17,8 +31,17 @@ function makeEmptyLeaves() {
   return leaves;
 }
 
+function clampActiveMonth(activeMonth, range) {
+  if (!range?.start || !range?.end) return activeMonth;
+  if (compareMonth(activeMonth, range.start) < 0) return range.start;
+  if (compareMonth(activeMonth, range.end) > 0) return range.end;
+  return activeMonth;
+}
+
 export function ScheduleProvider({ children }) {
-  const [month, setMonth] = useState(defaultMonth());
+  const [range, setRange] = useState(defaultRange());
+  const [activeMonth, setActiveMonth] = useState(() => defaultRange().start);
+  const [rangeError, setRangeError] = useState(null);
   const [nationalHolidays, setNationalHolidays] = useState(new Set());
   const [leavesByEmployeeId, setLeavesByEmployeeId] = useState(makeEmptyLeaves());
 
@@ -33,7 +56,7 @@ export function ScheduleProvider({ children }) {
     setHistoryStatus({ loading: true, error: null });
     try {
       const [loaded, months] = await Promise.all([
-        loadHistoryStats({ year: month.year, monthIndex: month.monthIndex, maxMonths: 6 }),
+        loadHistoryStats({ year: range.start.year, monthIndex: range.start.monthIndex, maxMonths: 6 }),
         listHistoryMonths(),
       ]);
       setHistory(loaded);
@@ -59,7 +82,7 @@ export function ScheduleProvider({ children }) {
       setHistoryStatus({ loading: true, error: null });
       try {
         const [loaded, months] = await Promise.all([
-          loadHistoryStats({ year: month.year, monthIndex: month.monthIndex, maxMonths: 6 }),
+          loadHistoryStats({ year: range.start.year, monthIndex: range.start.monthIndex, maxMonths: 6 }),
           listHistoryMonths(),
         ]);
         if (cancelled) return;
@@ -78,7 +101,7 @@ export function ScheduleProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [month.year, month.monthIndex]);
+  }, [range.start.year, range.start.monthIndex, range.end.year, range.end.monthIndex]);
 
   const value = useMemo(() => {
     const MAX_EDITS = 10;
@@ -87,24 +110,12 @@ export function ScheduleProvider({ children }) {
       COMPOFF: "COMPOFF",
     };
 
-    const selectedMonthKey = `${month.year}-${String(month.monthIndex + 1).padStart(2, "0")}`;
-    function isInSelectedMonth(isoDate) {
-      const iso = String(isoDate ?? "").trim();
-      return iso.length >= 7 && iso.slice(0, 7) === selectedMonthKey;
-    }
-
     function capEdits(arr) {
       if (arr.length <= MAX_EDITS) return arr;
       return arr.slice(arr.length - MAX_EDITS);
     }
 
-    function setMonthFromInput(value) {
-      // HTML month input: "YYYY-MM"
-      const [y, m] = value.split("-").map((x) => Number(x));
-      if (!y || !Number.isFinite(m)) return;
-      setMonth({ year: y, monthIndex: m - 1 });
-
-      // Reset selections when month changes (simplest/least surprising)
+    function resetSelectionsForNewRange() {
       setNationalHolidays(new Set());
       setLeavesByEmployeeId(makeEmptyLeaves());
       setGenerated({ scheduleByDate: null, warnings: [], errors: [] });
@@ -112,8 +123,52 @@ export function ScheduleProvider({ children }) {
       setEditFuture([]);
     }
 
+    function setRangeFromInputs(startYYYYMM, endYYYYMM) {
+      const start = parseMonthKey(startYYYYMM);
+      const end = parseMonthKey(endYYYYMM);
+
+      if (!start || !end) {
+        setRangeError("Please pick both a start month and an end month.");
+        return false;
+      }
+      if (compareMonth(end, start) < 0) {
+        setRangeError(
+          `The end month (${monthKeyOf(end)}) is before the start month (${monthKeyOf(start)}). Please pick an end month on or after the start.`
+        );
+        return false;
+      }
+
+      const nextRange = { start, end };
+      const count = monthsInRangeCount(nextRange);
+      if (count > MAX_RANGE_MONTHS) {
+        setRangeError(
+          `Range is ${count} months; the maximum allowed is ${MAX_RANGE_MONTHS}. Please pick a shorter range.`
+        );
+        return false;
+      }
+
+      setRangeError(null);
+      setRange(nextRange);
+      setActiveMonth(start);
+      resetSelectionsForNewRange();
+      return true;
+    }
+
+    function setActiveMonthFromInput(yyyymm) {
+      const parsed = parseMonthKey(yyyymm);
+      if (!parsed) return;
+      setActiveMonth(clampActiveMonth(parsed, range));
+    }
+
+    function stepActiveMonth(delta) {
+      const list = monthsInRange(range);
+      const idx = list.findIndex((m) => compareMonth(m, activeMonth) === 0);
+      const nextIdx = Math.max(0, Math.min(list.length - 1, (idx >= 0 ? idx : 0) + delta));
+      setActiveMonth(list[nextIdx] ?? range.start);
+    }
+
     function addNationalHoliday(isoDate) {
-      if (!isInSelectedMonth(isoDate)) return;
+      if (!isInRange(isoDate, range)) return;
       setNationalHolidays((prev) => {
         const next = new Set(prev);
         next.add(isoDate);
@@ -130,7 +185,7 @@ export function ScheduleProvider({ children }) {
     }
 
     function addEmployeeLeave(employeeId, isoDate) {
-      if (!isInSelectedMonth(isoDate)) return;
+      if (!isInRange(isoDate, range)) return;
       setLeavesByEmployeeId((prev) => {
         const next = { ...prev };
         const set = new Set(next[employeeId] ?? []);
@@ -152,8 +207,7 @@ export function ScheduleProvider({ children }) {
 
     async function generate() {
       const result = generateSchedule({
-        year: month.year,
-        monthIndex: month.monthIndex,
+        range,
         leavesByEmployeeId,
         nationalHolidays: Array.from(nationalHolidays),
         history,
@@ -172,7 +226,6 @@ export function ScheduleProvider({ children }) {
         errors: result.errors,
       });
 
-      // Reset edit history for a fresh generated schedule.
       setEditPast([]);
       setEditFuture([]);
 
@@ -220,14 +273,12 @@ export function ScheduleProvider({ children }) {
         nextDay.assignments[shift] = [...(nextDay.assignments[shift] ?? [])];
       }
 
-      // Remove from all buckets.
       for (const shift of Object.keys(nextDay.assignments)) {
         nextDay.assignments[shift] = (nextDay.assignments[shift] ?? []).filter((id) => id !== employeeId);
       }
       nextDay.leaveEmployeeIds = (nextDay.leaveEmployeeIds ?? []).filter((id) => id !== employeeId);
       nextDay.compOffEmployeeIds = (nextDay.compOffEmployeeIds ?? []).filter((id) => id !== employeeId);
 
-      // Add to target bucket.
       if (toBucket === EXTRA.LEAVE) {
         if (!nextDay.leaveEmployeeIds.includes(employeeId)) nextDay.leaveEmployeeIds.push(employeeId);
       } else if (toBucket === EXTRA.COMPOFF) {
@@ -247,7 +298,6 @@ export function ScheduleProvider({ children }) {
     function updateAssignment({ fromIsoDate, toIsoDate, fromShift, toShift, employeeId }) {
       setGenerated((prev) => {
         if (!prev.scheduleByDate) return prev;
-        // UX rule: editing is intra-day only.
         if (fromIsoDate !== toIsoDate) return prev;
 
         const isoDate = fromIsoDate;
@@ -260,7 +310,6 @@ export function ScheduleProvider({ children }) {
 
         if (!result.changed) return prev;
 
-        // Record edit as a compact action for undo/redo.
         const action = {
           isoDate,
           employeeId,
@@ -272,8 +321,6 @@ export function ScheduleProvider({ children }) {
           setEditFuture([]);
         }
 
-        // Re-validate after edits (best-effort; doesn’t rebuild the weekly plan)
-        // To keep it cheap, we validate the whole schedule (small dataset).
         const validation = validateSchedule(result.nextScheduleByDate);
 
         return {
@@ -339,9 +386,16 @@ export function ScheduleProvider({ children }) {
       setEditPast((p) => capEdits([...p, action]));
     }
 
+    const rangeMonths = monthsInRange(range);
+
     return {
-      month,
-      setMonthFromInput,
+      range,
+      rangeError,
+      rangeMonths,
+      setRangeFromInputs,
+      activeMonth,
+      setActiveMonthFromInput,
+      stepActiveMonth,
       nationalHolidays,
       addNationalHoliday,
       removeNationalHoliday,
@@ -361,7 +415,9 @@ export function ScheduleProvider({ children }) {
       refreshHistory,
     };
   }, [
-    month,
+    range,
+    rangeError,
+    activeMonth,
     nationalHolidays,
     leavesByEmployeeId,
     generated,

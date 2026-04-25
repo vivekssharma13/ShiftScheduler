@@ -3,13 +3,15 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { EMPLOYEES } from "../constants/employees.js";
 import { useSchedule } from "../state/scheduleStore.js";
-import { eachDayOfMonth, toISODate } from "../utils/date.js";
+import {
+  compareMonth,
+  eachDayOfMonth,
+  formatMonthLabel,
+  monthKeyOf,
+  toISODate,
+} from "../utils/date.js";
 import { deleteHistoryMonth, saveHistoryCsv } from "../utils/historyDb.js";
-
-function formatMonthInput({ year, monthIndex }) {
-  const mm = String(monthIndex + 1).padStart(2, "0");
-  return `${year}-${mm}`;
-}
+import { parseHistoryZip } from "../utils/zipBundle.js";
 
 function sortIsoDates(set) {
   return Array.from(set).sort();
@@ -22,7 +24,7 @@ function dayName(isoDate) {
 function MonthGrid({ month, selectedSet, onToggle, ariaLabel }) {
   const gridDays = useMemo(() => {
     const monthDays = eachDayOfMonth(month.year, month.monthIndex);
-    const firstDow = new Date(month.year, month.monthIndex, 1).getDay(); // 0=Sun
+    const firstDow = new Date(month.year, month.monthIndex, 1).getDay();
     const days = [];
     for (let i = 0; i < firstDow; i += 1) days.push(null);
     for (const d of monthDays) days.push(toISODate(d));
@@ -64,11 +66,49 @@ function MonthGrid({ month, selectedSet, onToggle, ariaLabel }) {
   );
 }
 
+function MonthNavigator({ rangeMonths, activeMonth, onSelect, onStep }) {
+  if (!rangeMonths.length) return null;
+  const idx = rangeMonths.findIndex((m) => compareMonth(m, activeMonth) === 0);
+  const safeIdx = idx >= 0 ? idx : 0;
+  const canPrev = safeIdx > 0;
+  const canNext = safeIdx < rangeMonths.length - 1;
+
+  return (
+    <div className="row" style={{ alignItems: "center", gap: 8 }}>
+      <button type="button" className="btn" disabled={!canPrev} onClick={() => onStep(-1)}>
+        ‹
+      </button>
+      <label className="label" style={{ marginBottom: 0 }}>
+        Viewing
+        <select
+          className="input"
+          value={monthKeyOf(activeMonth)}
+          onChange={(e) => onSelect(e.target.value)}
+        >
+          {rangeMonths.map((m) => (
+            <option key={monthKeyOf(m)} value={monthKeyOf(m)}>
+              {formatMonthLabel(m)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="btn" disabled={!canNext} onClick={() => onStep(1)}>
+        ›
+      </button>
+    </div>
+  );
+}
+
 export default function HolidaysPage() {
   const nav = useNavigate();
   const {
-    month,
-    setMonthFromInput,
+    range,
+    rangeError,
+    rangeMonths,
+    setRangeFromInputs,
+    activeMonth,
+    setActiveMonthFromInput,
+    stepActiveMonth,
     nationalHolidays,
     addNationalHoliday,
     removeNationalHoliday,
@@ -83,18 +123,41 @@ export default function HolidaysPage() {
     refreshHistory,
   } = useSchedule();
 
+  const [startInput, setStartInput] = useState(monthKeyOf(range.start));
+  const [endInput, setEndInput] = useState(monthKeyOf(range.end));
   const [historyMonthInput, setHistoryMonthInput] = useState("");
   const [historyFile, setHistoryFile] = useState(null);
   const [historyMsg, setHistoryMsg] = useState(null);
   const [holidaysCalOpen, setHolidaysCalOpen] = useState(false);
   const [leavesCalOpenByEmployeeId, setLeavesCalOpenByEmployeeId] = useState({});
 
-  const holidaysSorted = useMemo(() => sortIsoDates(nationalHolidays), [nationalHolidays]);
+  const activeMonthKey = monthKeyOf(activeMonth);
+
+  const allHolidaysSorted = useMemo(
+    () => sortIsoDates(nationalHolidays),
+    [nationalHolidays]
+  );
+
+  const holidaysInActiveMonth = useMemo(
+    () => allHolidaysSorted.filter((iso) => iso.startsWith(activeMonthKey)),
+    [allHolidaysSorted, activeMonthKey]
+  );
+
+  const totalHolidaysInRange = nationalHolidays.size;
 
   useEffect(() => {
     setHolidaysCalOpen(false);
     setLeavesCalOpenByEmployeeId({});
-  }, [month.year, month.monthIndex]);
+  }, [activeMonth.year, activeMonth.monthIndex]);
+
+  useEffect(() => {
+    setStartInput(monthKeyOf(range.start));
+    setEndInput(monthKeyOf(range.end));
+  }, [range.start.year, range.start.monthIndex, range.end.year, range.end.monthIndex]);
+
+  function applyRangeInputs(nextStart, nextEnd) {
+    setRangeFromInputs(nextStart, nextEnd);
+  }
 
   function isValidMonthKey(value) {
     return /^\d{4}-\d{2}$/.test(String(value ?? ""));
@@ -105,12 +168,27 @@ export default function HolidaysPage() {
       <section className="panel">
         <div className="row">
           <label className="label">
-            Month
+            Start month
             <input
               className="input"
               type="month"
-              value={formatMonthInput(month)}
-              onChange={(e) => setMonthFromInput(e.target.value)}
+              value={startInput}
+              onChange={(e) => {
+                setStartInput(e.target.value);
+                applyRangeInputs(e.target.value, endInput);
+              }}
+            />
+          </label>
+          <label className="label">
+            End month
+            <input
+              className="input"
+              type="month"
+              value={endInput}
+              onChange={(e) => {
+                setEndInput(e.target.value);
+                applyRangeInputs(startInput, e.target.value);
+              }}
             />
           </label>
 
@@ -127,9 +205,33 @@ export default function HolidaysPage() {
           </div>
         </div>
 
-        <div className="split">
+        {rangeError ? (
+          <div className="alert danger" style={{ marginTop: 10 }}>
+            {rangeError}
+          </div>
+        ) : null}
+
+        <p className="muted" style={{ marginTop: 4 }}>
+          Range: {formatMonthLabel(range.start)} to {formatMonthLabel(range.end)} ({rangeMonths.length} month
+          {rangeMonths.length === 1 ? "" : "s"}). Holidays across all months: {totalHolidaysInRange}.
+        </p>
+
+        <div style={{ marginTop: 10 }}>
+          <MonthNavigator
+            rangeMonths={rangeMonths}
+            activeMonth={activeMonth}
+            onSelect={setActiveMonthFromInput}
+            onStep={stepActiveMonth}
+          />
+        </div>
+
+        <div className="split" style={{ marginTop: 10 }}>
           <div>
             <h2 className="h">National holidays</h2>
+            <p className="muted" style={{ marginTop: 4 }}>
+              Picking dates in {formatMonthLabel(activeMonth)}. Selected dates from every month in the
+              range are listed below.
+            </p>
             <details
               className="dropdown"
               open={holidaysCalOpen}
@@ -142,20 +244,19 @@ export default function HolidaysPage() {
                 <button
                   type="button"
                   className="btn"
-                  disabled={nationalHolidays.size === 0}
+                  disabled={holidaysInActiveMonth.length === 0}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const all = Array.from(nationalHolidays);
-                    for (const iso of all) removeNationalHoliday(iso);
+                    for (const iso of holidaysInActiveMonth) removeNationalHoliday(iso);
                   }}
-                  title="Clear all selected holiday dates"
+                  title="Clear holidays selected in this month"
                 >
-                  Clear
+                  Clear this month
                 </button>
               </div>
               <MonthGrid
-                month={month}
+                month={activeMonth}
                 selectedSet={nationalHolidays}
                 ariaLabel="National holidays calendar"
                 onToggle={(iso) => {
@@ -165,13 +266,15 @@ export default function HolidaysPage() {
               />
             </details>
 
-            {holidaysSorted.length === 0 ? (
-              <p className="muted">No national holidays selected yet.</p>
+            {allHolidaysSorted.length === 0 ? (
+              <p className="muted">No national holidays selected in this range.</p>
             ) : (
               <ul className="list">
-                {holidaysSorted.map((iso) => (
+                {allHolidaysSorted.map((iso) => (
                   <li key={iso} className="listItem">
-                    <span>{iso}</span>
+                    <span>
+                      {iso} <span className="muted">({dayName(iso)})</span>
+                    </span>
                     <button className="link" onClick={() => removeNationalHoliday(iso)}>
                       Remove
                     </button>
@@ -184,13 +287,18 @@ export default function HolidaysPage() {
           <div>
             <h2 className="h">Employee leaves</h2>
             <p className="muted">
-              Add leave dates per employee. (Weekly offs are already fixed on Saturday/Sunday.)
+              Picking leave dates in {formatMonthLabel(activeMonth)}. Switch months above to mark leaves
+              in another month — every selected date across the range is listed below each employee.
+              Weekly offs are already fixed on Saturday/Sunday.
             </p>
 
             <div className="leaveGrid">
               {EMPLOYEES.map((e) => {
                 const leaves = leavesByEmployeeId[e.id] ?? new Set();
-                const sorted = sortIsoDates(leaves);
+                const allLeavesSorted = sortIsoDates(leaves);
+                const leavesInActiveMonth = allLeavesSorted.filter((iso) =>
+                  iso.startsWith(activeMonthKey)
+                );
 
                 return (
                   <div key={e.id} className="leaveCard">
@@ -216,20 +324,19 @@ export default function HolidaysPage() {
                         <button
                           type="button"
                           className="btn"
-                          disabled={leaves.size === 0}
+                          disabled={leavesInActiveMonth.length === 0}
                           onClick={(ev) => {
                             ev.preventDefault();
                             ev.stopPropagation();
-                            const all = Array.from(leaves);
-                            for (const iso of all) removeEmployeeLeave(e.id, iso);
+                            for (const iso of leavesInActiveMonth) removeEmployeeLeave(e.id, iso);
                           }}
-                          title="Clear all selected leave dates"
+                          title="Clear leaves in this month"
                         >
-                          Clear
+                          Clear this month
                         </button>
                       </div>
                       <MonthGrid
-                        month={month}
+                        month={activeMonth}
                         selectedSet={leaves}
                         ariaLabel={`${e.id} leave calendar`}
                         onToggle={(iso) => {
@@ -239,13 +346,15 @@ export default function HolidaysPage() {
                       />
                     </details>
 
-                    {sorted.length === 0 ? (
-                      <p className="muted">No leave dates.</p>
+                    {allLeavesSorted.length === 0 ? (
+                      <p className="muted">No leave dates in this range.</p>
                     ) : (
                       <ul className="list">
-                        {sorted.map((iso) => (
+                        {allLeavesSorted.map((iso) => (
                           <li key={iso} className="listItem">
-                            <span>{iso}</span>
+                            <span>
+                              {iso} <span className="muted">({dayName(iso)})</span>
+                            </span>
                             <button
                               className="link"
                               onClick={() => removeEmployeeLeave(e.id, iso)}
@@ -268,8 +377,8 @@ export default function HolidaysPage() {
               History: {historyStatus.loading ? "loading…" : `${historyLibraryMonths.length} uploaded`}
             </p>
             <p className="muted">
-              Upload prior month CSVs to balance future schedules. Files are stored in this browser
-              (survive refresh).
+              Upload prior month CSVs (or a .zip bundle exported from this app) to balance future
+              schedules. Files are stored in this browser and survive refresh.
             </p>
 
             <div className="row">
@@ -281,14 +390,17 @@ export default function HolidaysPage() {
                   value={historyMonthInput}
                   onChange={(e) => setHistoryMonthInput(e.target.value)}
                 />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Required for single-CSV uploads. Ignored for .zip bundles.
+                </span>
               </label>
 
               <label className="label">
-                CSV
+                File
                 <input
                   className="input"
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.zip,text/csv,application/zip"
                   onChange={(e) => setHistoryFile(e.target.files?.[0] ?? null)}
                 />
               </label>
@@ -298,17 +410,41 @@ export default function HolidaysPage() {
                   className="btn"
                   onClick={async () => {
                     setHistoryMsg(null);
-                    const mk = String(historyMonthInput ?? "");
-                    if (!isValidMonthKey(mk)) {
-                      setHistoryMsg("Pick a valid month for this CSV.");
-                      return;
-                    }
                     if (!historyFile) {
-                      setHistoryMsg("Pick a CSV file to upload.");
+                      setHistoryMsg("Pick a CSV or ZIP file to upload.");
                       return;
                     }
 
+                    const name = String(historyFile.name ?? "").toLowerCase();
                     try {
+                      if (name.endsWith(".zip")) {
+                        const { imported, skipped } = await parseHistoryZip(historyFile);
+                        if (imported.length === 0) {
+                          setHistoryMsg(
+                            "The zip did not contain any CSV files named with a year-month (e.g. shift-schedule_2025-10.csv). Please check the bundle."
+                          );
+                          return;
+                        }
+                        for (const entry of imported) {
+                          await saveHistoryCsv({ monthKey: entry.monthKey, csvText: entry.csvText });
+                        }
+                        await refreshHistory();
+                        const monthsList = imported.map((x) => x.monthKey).sort().join(", ");
+                        const skippedNote =
+                          skipped && skipped.length > 0
+                            ? ` Skipped ${skipped.length} file(s) without a recognizable year-month in the name.`
+                            : "";
+                        setHistoryMsg(`Imported ${imported.length} month(s) from bundle: ${monthsList}.${skippedNote}`);
+                        setHistoryFile(null);
+                        return;
+                      }
+
+                      const mk = String(historyMonthInput ?? "");
+                      if (!isValidMonthKey(mk)) {
+                        setHistoryMsg("Pick a valid month for this CSV (single-CSV uploads require a month).");
+                        return;
+                      }
+
                       const csvText = await historyFile.text();
                       await saveHistoryCsv({ monthKey: mk, csvText });
                       await refreshHistory();
@@ -359,8 +495,8 @@ export default function HolidaysPage() {
             )}
 
             <p className="muted" style={{ marginTop: 10 }}>
-              For balancing this month, the scheduler uses up to 6 uploaded months before the
-              selected month.
+              For balancing, the scheduler uses up to 6 uploaded months before the start of the selected
+              range.
               {(history?.monthsUsed?.length ?? 0) > 0
                 ? ` Used: ${history.monthsUsed.join(", ")}.`
                 : " No eligible uploaded months found."}

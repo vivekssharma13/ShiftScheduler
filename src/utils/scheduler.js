@@ -1,7 +1,7 @@
 import { addDays, getDay, startOfWeek } from "date-fns";
 import { EMPLOYEES, isLeadOrSenior, ROLE, WEEKLY_OFF, WEEKLY_OFF_BY_DAY } from "../constants/employees.js";
 import { MAX_STAFFING, MIN_STAFFING, SHIFT, TARGET_STAFFING } from "../constants/shifts.js";
-import { eachDayOfMonth, toISODate } from "./date.js";
+import { eachDayOfRange, monthsInRange, monthKeyOf, toISODate } from "./date.js";
 import { validateSchedule } from "./validation.js";
 
 const MAX_NIGHT_DAYS = {
@@ -28,19 +28,22 @@ function without(arr, id) {
   return arr.filter((x) => x !== id);
 }
 
-function pickTwoForNight({
+function sortByFairness({
   candidateIds,
-  plannedNightCounts,
-  employeeById,
+  cumulativeNightCounts,
+  monthlyNightCounts,
+  primaryMonthKey,
   historyStatsByEmployeeId,
-  plannedNightDays,
-  disallowIds,
-  preferId,
+  lastNightWeekIndexByEmployeeId,
 }) {
-  const sorted = [...candidateIds].sort((a, b) => {
-    const aPlanned = plannedNightCounts[a] ?? 0;
-    const bPlanned = plannedNightCounts[b] ?? 0;
-    if (aPlanned !== bPlanned) return aPlanned - bPlanned;
+  return [...candidateIds].sort((a, b) => {
+    const aCum = cumulativeNightCounts?.[a] ?? 0;
+    const bCum = cumulativeNightCounts?.[b] ?? 0;
+    if (aCum !== bCum) return aCum - bCum;
+
+    const aMonth = monthlyNightCounts?.[primaryMonthKey]?.[a] ?? 0;
+    const bMonth = monthlyNightCounts?.[primaryMonthKey]?.[b] ?? 0;
+    if (aMonth !== bMonth) return aMonth - bMonth;
 
     const aHistNight = historyStatsByEmployeeId?.[a]?.C ?? 0;
     const bHistNight = historyStatsByEmployeeId?.[b]?.C ?? 0;
@@ -50,20 +53,62 @@ function pickTwoForNight({
     const bHistComp = historyStatsByEmployeeId?.[b]?.compOffs ?? 0;
     if (aHistComp !== bHistComp) return aHistComp - bHistComp;
 
+    // Round-robin tiebreak: whoever did C shift longer ago goes first.
+    // Employees who never did C in this run get -1, so they always win this tiebreak.
+    const aLast = lastNightWeekIndexByEmployeeId?.[a] ?? -1;
+    const bLast = lastNightWeekIndexByEmployeeId?.[b] ?? -1;
+    if (aLast !== bLast) return aLast - bLast;
+
     return a.localeCompare(b);
+  });
+}
+
+function wouldExceedMonthlyCap({ employeeId, role, monthlyNightCounts, contributionsByMonth }) {
+  const max = MAX_NIGHT_DAYS[role] ?? 12;
+  for (const [monthKey, days] of Object.entries(contributionsByMonth)) {
+    if (days <= 0) continue;
+    const used = monthlyNightCounts?.[monthKey]?.[employeeId] ?? 0;
+    if (used + days > max) return true;
+  }
+  return false;
+}
+
+function pickTwoForNight({
+  candidateIds,
+  cumulativeNightCounts,
+  monthlyNightCounts,
+  primaryMonthKey,
+  employeeById,
+  historyStatsByEmployeeId,
+  lastNightWeekIndexByEmployeeId,
+  contributionsByMonth,
+  disallowIds,
+  preferId,
+}) {
+  const sorted = sortByFairness({
+    candidateIds,
+    cumulativeNightCounts,
+    monthlyNightCounts,
+    primaryMonthKey,
+    historyStatsByEmployeeId,
+    lastNightWeekIndexByEmployeeId,
   });
 
   const disallowed = new Set(disallowIds ?? []);
 
-  // Prefer employees still within their night limit.
+  // Prefer employees still within their per-month night limit across every touched month.
   const picked = [];
 
   if (preferId && !disallowed.has(preferId) && sorted.includes(preferId)) {
     const employee = employeeById.get(preferId);
     if (employee) {
-      const used = plannedNightCounts[preferId] ?? 0;
-      const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
-      if (used + plannedNightDays <= max) {
+      const exceeds = wouldExceedMonthlyCap({
+        employeeId: preferId,
+        role: employee.role,
+        monthlyNightCounts,
+        contributionsByMonth,
+      });
+      if (!exceeds) {
         picked.push(preferId);
       }
     }
@@ -74,9 +119,13 @@ function pickTwoForNight({
     if (picked.includes(id)) continue;
     const employee = employeeById.get(id);
     if (!employee) continue;
-    const used = plannedNightCounts[id] ?? 0;
-    const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
-    if (used + plannedNightDays > max) continue;
+    const exceeds = wouldExceedMonthlyCap({
+      employeeId: id,
+      role: employee.role,
+      monthlyNightCounts,
+      contributionsByMonth,
+    });
+    if (exceeds) continue;
     picked.push(id);
     if (picked.length === 2) return picked;
   }
@@ -94,27 +143,23 @@ function pickTwoForNight({
 
 function pickOneForNight({
   candidateIds,
-  plannedNightCounts,
+  cumulativeNightCounts,
+  monthlyNightCounts,
+  primaryMonthKey,
   employeeById,
   historyStatsByEmployeeId,
-  plannedNightDays,
+  lastNightWeekIndexByEmployeeId,
+  contributionsByMonth,
   disallowIds,
   preferId,
 }) {
-  const sorted = [...candidateIds].sort((a, b) => {
-    const aPlanned = plannedNightCounts[a] ?? 0;
-    const bPlanned = plannedNightCounts[b] ?? 0;
-    if (aPlanned !== bPlanned) return aPlanned - bPlanned;
-
-    const aHistNight = historyStatsByEmployeeId?.[a]?.C ?? 0;
-    const bHistNight = historyStatsByEmployeeId?.[b]?.C ?? 0;
-    if (aHistNight !== bHistNight) return aHistNight - bHistNight;
-
-    const aHistComp = historyStatsByEmployeeId?.[a]?.compOffs ?? 0;
-    const bHistComp = historyStatsByEmployeeId?.[b]?.compOffs ?? 0;
-    if (aHistComp !== bHistComp) return aHistComp - bHistComp;
-
-    return a.localeCompare(b);
+  const sorted = sortByFairness({
+    candidateIds,
+    cumulativeNightCounts,
+    monthlyNightCounts,
+    primaryMonthKey,
+    historyStatsByEmployeeId,
+    lastNightWeekIndexByEmployeeId,
   });
 
   const disallowed = new Set(disallowIds ?? []);
@@ -122,9 +167,13 @@ function pickOneForNight({
   if (preferId && !disallowed.has(preferId) && sorted.includes(preferId)) {
     const employee = employeeById.get(preferId);
     if (employee) {
-      const used = plannedNightCounts[preferId] ?? 0;
-      const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
-      if (used + plannedNightDays <= max) return preferId;
+      const exceeds = wouldExceedMonthlyCap({
+        employeeId: preferId,
+        role: employee.role,
+        monthlyNightCounts,
+        contributionsByMonth,
+      });
+      if (!exceeds) return preferId;
     }
   }
 
@@ -132,9 +181,13 @@ function pickOneForNight({
     if (disallowed.has(id)) continue;
     const employee = employeeById.get(id);
     if (!employee) continue;
-    const used = plannedNightCounts[id] ?? 0;
-    const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
-    if (used + plannedNightDays > max) continue;
+    const exceeds = wouldExceedMonthlyCap({
+      employeeId: id,
+      role: employee.role,
+      monthlyNightCounts,
+      contributionsByMonth,
+    });
+    if (exceeds) continue;
     return id;
   }
 
@@ -169,51 +222,82 @@ function pickOneForA({ candidateIds, lastWeekShiftByEmployeeId, plannedShiftCoun
   return sorted[0] ?? null;
 }
 
-function buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmployeeId }) {
+function buildWeeklyShiftPlan({ rangeDays, range, historyStatsByEmployeeId }) {
   const employeeById = new Map(EMPLOYEES.map((e) => [e.id, e]));
-  const weekStarts = uniq(monthDays.map((d) => weekKey(d))).map((iso) => new Date(iso));
+  const weekStarts = uniq(rangeDays.map((d) => weekKey(d))).map((iso) => new Date(iso));
+
+  const rangeMonthKeys = new Set(monthsInRange(range).map(monthKeyOf));
+  const rangeDaysIsoSet = new Set(rangeDays.map((d) => toISODate(d)));
 
   const lastWeekShiftByEmployeeId = {};
-  const plannedNightCounts = {}; // planned night-day count within this month
-  const plannedShiftCounts = {}; // planned shift-day count within this month
+  // Cumulative night-day counts across the entire range (drives inter-month fairness).
+  const cumulativeNightCounts = {};
+  // Per-month night-day counts, keyed by "YYYY-MM" (drives the spec's monthly caps).
+  const monthlyNightCounts = {};
+  // Records the loop index of the last week each employee was placed on the C shift.
+  // Used as a round-robin tiebreak so we don't fall through to alphabetical bias when
+  // cumulative + monthly counts are tied at week boundaries.
+  const lastNightWeekIndexByEmployeeId = {};
+  const plannedShiftCounts = {};
   const weekPlanByWeekStartIso = {};
 
   let partialSunOffNightId = null;
   let partialSatOffNightId = null;
 
-  function isInMonth(d) {
-    return d.getFullYear() === year && d.getMonth() === monthIndex;
+  function isInRangeDate(d) {
+    return rangeDaysIsoSet.has(toISODate(d));
   }
 
-  function countDaysInMonthForWeek(weekStart) {
+  function countDaysInRangeForWeek(weekStart) {
     let count = 0;
     for (let i = 0; i < 7; i += 1) {
       const d = addDays(weekStart, i);
-      if (isInMonth(d)) count += 1;
+      if (isInRangeDate(d)) count += 1;
     }
     return count;
   }
 
-  function hasDowInMonthForWeek(weekStart, dow) {
-    // dow: 0=Sun, 6=Sat
+  // Returns { totalNightDays, offDayInRange, contributionsByMonth } for a given week + weekly-off group.
+  function nightDaysBreakdownForWeek(weekStart, weeklyOffDay) {
+    const offDow = weeklyOffDay === WEEKLY_OFF.SATURDAY ? 6 : 0;
+    const contributionsByMonth = {};
+    let totalNightDays = 0;
+    let offDayInRange = false;
+
     for (let i = 0; i < 7; i += 1) {
       const d = addDays(weekStart, i);
-      if (isInMonth(d) && getDay(d) === dow) return true;
+      if (!isInRangeDate(d)) continue;
+      if (getDay(d) === offDow) {
+        offDayInRange = true;
+        continue;
+      }
+      totalNightDays += 1;
+      const mk = monthKeyOf({ year: d.getFullYear(), monthIndex: d.getMonth() });
+      contributionsByMonth[mk] = (contributionsByMonth[mk] ?? 0) + 1;
     }
-    return false;
+
+    return { totalNightDays, offDayInRange, contributionsByMonth };
   }
 
-  function plannedNightDaysForWeekAndGroup(weekStart, weeklyOffDay) {
-    // weeklyOffDay: 'Saturday' or 'Sunday'
-    const daysInMonth = countDaysInMonthForWeek(weekStart);
-    if (daysInMonth === 0) return 0;
-    const offDow = weeklyOffDay === WEEKLY_OFF.SATURDAY ? 6 : 0;
-    const offDayIsInMonth = hasDowInMonthForWeek(weekStart, offDow);
-    return Math.max(0, daysInMonth - (offDayIsInMonth ? 1 : 0));
+  function primaryMonthKeyFor(contributionsByMonth) {
+    let best = null;
+    let bestCount = -1;
+    for (const [mk, n] of Object.entries(contributionsByMonth)) {
+      if (n > bestCount) {
+        bestCount = n;
+        best = mk;
+      }
+    }
+    return best;
   }
 
   for (const employee of EMPLOYEES) {
     plannedShiftCounts[employee.id] = { [SHIFT.A]: 0, [SHIFT.B]: 0, [SHIFT.C]: 0 };
+    cumulativeNightCounts[employee.id] = 0;
+  }
+  for (const mk of rangeMonthKeys) {
+    monthlyNightCounts[mk] = {};
+    for (const employee of EMPLOYEES) monthlyNightCounts[mk][employee.id] = 0;
   }
 
   for (let i = 0; i < weekStarts.length; i += 1) {
@@ -226,26 +310,22 @@ function buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmplo
     const saturdayWorking = WEEKLY_OFF_BY_DAY[WEEKLY_OFF.SUNDAY];
     const sundayWorking = WEEKLY_OFF_BY_DAY[WEEKLY_OFF.SATURDAY];
 
-    // For our fixed weekly-off model, all employees in the same group have the same number of
-    // in-month working days for this week.
-    // - saturdayWorking = Sunday-off employees
-    // - sundayWorking = Saturday-off employees
-    const sunOffNightDays = plannedNightDaysForWeekAndGroup(start, WEEKLY_OFF.SUNDAY);
-    const satOffNightDays = plannedNightDaysForWeekAndGroup(start, WEEKLY_OFF.SATURDAY);
+    const sunOff = nightDaysBreakdownForWeek(start, WEEKLY_OFF.SUNDAY);
+    const satOff = nightDaysBreakdownForWeek(start, WEEKLY_OFF.SATURDAY);
 
-    const isPartialSunOffWeek = sunOffNightDays > 0 && sunOffNightDays < MIN_NIGHT_DAYS_TARGET;
-    const isPartialSatOffWeek = satOffNightDays > 0 && satOffNightDays < MIN_NIGHT_DAYS_TARGET;
+    const isPartialSunOffWeek = sunOff.totalNightDays > 0 && sunOff.totalNightDays < MIN_NIGHT_DAYS_TARGET;
+    const isPartialSatOffWeek = satOff.totalNightDays > 0 && satOff.totalNightDays < MIN_NIGHT_DAYS_TARGET;
 
-    // C shift is capped at 2/day and should be continuous for the week.
-    // With fixed Sat/Sun weekly-offs, having 2 people in C every weekend day may be impossible
-    // without breaking weekly continuity. We pick 2 for the week: one from each weekend-off group.
     const cFromSatGroup = pickOneForNight({
       candidateIds: saturdayWorking,
-      plannedNightCounts,
+      cumulativeNightCounts,
+      monthlyNightCounts,
+      primaryMonthKey: primaryMonthKeyFor(sunOff.contributionsByMonth),
       employeeById,
       historyStatsByEmployeeId,
-      plannedNightDays: sunOffNightDays,
-      // For partial weeks (<6 in-month working days), avoid using the Lead so they can take a full 6-day
+      lastNightWeekIndexByEmployeeId,
+      contributionsByMonth: sunOff.contributionsByMonth,
+      // For partial weeks (<6 in-range working days), avoid using the Lead so they can take a full 6-day
       // week of nights within their cap.
       disallowIds: isPartialSunOffWeek ? ["AZM"] : [],
       // Only "carry" across partial weeks (not into full weeks) to avoid long runs and imbalance.
@@ -253,25 +333,49 @@ function buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmplo
     });
     const cFromSunGroup = pickOneForNight({
       candidateIds: sundayWorking,
-      plannedNightCounts,
+      cumulativeNightCounts,
+      monthlyNightCounts,
+      primaryMonthKey: primaryMonthKeyFor(satOff.contributionsByMonth),
       employeeById,
       historyStatsByEmployeeId,
-      plannedNightDays: satOffNightDays,
+      lastNightWeekIndexByEmployeeId,
+      contributionsByMonth: satOff.contributionsByMonth,
       disallowIds: isPartialSatOffWeek ? ["AZM"] : [],
       preferId: isPartialSatOffWeek ? partialSatOffNightId : null,
     });
 
     const cIds = uniq([cFromSatGroup, cFromSunGroup].filter(Boolean));
 
-    // Remember who handled partial weeks so we can prefer the same person on the next partial week.
-    if (isPartialSunOffWeek && cFromSatGroup) partialSunOffNightId = cFromSatGroup;
-    if (isPartialSatOffWeek && cFromSunGroup) partialSatOffNightId = cFromSunGroup;
+    // Carry-forward continuity for partial weeks: only across *adjacent* partial weeks.
+    // A non-partial week breaks the chain so the next partial week (often at the other end of the
+    // range) re-picks by fairness instead of locking onto the same person.
+    if (isPartialSunOffWeek) {
+      if (cFromSatGroup) partialSunOffNightId = cFromSatGroup;
+    } else {
+      partialSunOffNightId = null;
+    }
+    if (isPartialSatOffWeek) {
+      if (cFromSunGroup) partialSatOffNightId = cFromSunGroup;
+    } else {
+      partialSatOffNightId = null;
+    }
 
-    // Increment planned night counts using actual in-month night-days for this week/group.
-    if (cFromSatGroup) plannedNightCounts[cFromSatGroup] = (plannedNightCounts[cFromSatGroup] ?? 0) + sunOffNightDays;
-    if (cFromSunGroup) plannedNightCounts[cFromSunGroup] = (plannedNightCounts[cFromSunGroup] ?? 0) + satOffNightDays;
+    // Increment night counts (cumulative across the range + per-month).
+    function addNightContributions(empId, contributionsByMonth) {
+      if (!empId) return;
+      for (const [mk, days] of Object.entries(contributionsByMonth)) {
+        if (days <= 0) continue;
+        cumulativeNightCounts[empId] = (cumulativeNightCounts[empId] ?? 0) + days;
+        monthlyNightCounts[mk] = monthlyNightCounts[mk] ?? {};
+        monthlyNightCounts[mk][empId] = (monthlyNightCounts[mk][empId] ?? 0) + days;
+      }
+    }
+    addNightContributions(cFromSatGroup, sunOff.contributionsByMonth);
+    addNightContributions(cFromSunGroup, satOff.contributionsByMonth);
 
-    // Pick 1 A from each group so weekend can be A:1 (within the 4 available)
+    if (cFromSatGroup) lastNightWeekIndexByEmployeeId[cFromSatGroup] = i;
+    if (cFromSunGroup) lastNightWeekIndexByEmployeeId[cFromSunGroup] = i;
+
     const aFromSatGroup = pickOneForA({
       candidateIds: without(saturdayWorking, null).filter((id) => !cIds.includes(id)),
       lastWeekShiftByEmployeeId,
@@ -287,19 +391,15 @@ function buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmplo
 
     const aIds = uniq([aFromSatGroup, aFromSunGroup].filter(Boolean));
 
-    // Track per-shift planned day counts (used to balance future weekly picks).
-    if (aFromSatGroup) plannedShiftCounts[aFromSatGroup][SHIFT.A] += sunOffNightDays;
-    if (aFromSunGroup) plannedShiftCounts[aFromSunGroup][SHIFT.A] += satOffNightDays;
+    if (aFromSatGroup) plannedShiftCounts[aFromSatGroup][SHIFT.A] += sunOff.totalNightDays;
+    if (aFromSunGroup) plannedShiftCounts[aFromSunGroup][SHIFT.A] += satOff.totalNightDays;
     for (const id of cIds) {
-      // plannedNightCounts already tracks C day counts, but keep plannedShiftCounts in sync.
-      const add = id === cFromSatGroup ? sunOffNightDays : satOffNightDays;
+      const add = id === cFromSatGroup ? sunOff.totalNightDays : satOff.totalNightDays;
       plannedShiftCounts[id][SHIFT.C] += add;
     }
 
-    // Remaining employees go to B.
     const bIds = EMPLOYEES.map((e) => e.id).filter((id) => !cIds.includes(id) && !aIds.includes(id));
 
-    // Track last-week shift to avoid A two weeks in a row.
     for (const id of aIds) lastWeekShiftByEmployeeId[id] = SHIFT.A;
     for (const id of bIds) lastWeekShiftByEmployeeId[id] = SHIFT.B;
     for (const id of cIds) lastWeekShiftByEmployeeId[id] = SHIFT.C;
@@ -309,7 +409,6 @@ function buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmplo
       B: bIds,
       C: cIds,
       meta: {
-        // Helpful for user-facing warnings.
         note:
           "C shift is planned as a continuous weekly shift (max 2 people). Weekend C may drop to 1 on the weekly-off day.",
       },
@@ -333,6 +432,21 @@ function computeNightCounts(scheduleByDate) {
   return nightCountByEmployeeId;
 }
 
+function computeNightCountsByMonth(scheduleByDate) {
+  const byMonth = {};
+  for (const [iso, day] of Object.entries(scheduleByDate)) {
+    const monthKey = iso.slice(0, 7);
+    if (!byMonth[monthKey]) {
+      byMonth[monthKey] = {};
+      for (const e of EMPLOYEES) byMonth[monthKey][e.id] = 0;
+    }
+    for (const id of day.assignments?.C ?? []) {
+      byMonth[monthKey][id] = (byMonth[monthKey][id] ?? 0) + 1;
+    }
+  }
+  return byMonth;
+}
+
 function getWeeklyOffIdsForDate(date) {
   const dow = getDay(date);
   if (dow === 6) return WEEKLY_OFF_BY_DAY[WEEKLY_OFF.SATURDAY];
@@ -342,13 +456,13 @@ function getWeeklyOffIdsForDate(date) {
 
 const MIN_AVAILABLE_EMPLOYEES_PER_DAY = 4;
 
-function buildInitialSchedule({ year, monthIndex, leavesByEmployeeId, nationalHolidaySet, historyStatsByEmployeeId }) {
-  const monthDays = eachDayOfMonth(year, monthIndex);
-  const weekPlanByWeekStartIso = buildWeeklyShiftPlan({ monthDays, year, monthIndex, historyStatsByEmployeeId });
+function buildInitialSchedule({ range, leavesByEmployeeId, nationalHolidaySet, historyStatsByEmployeeId }) {
+  const rangeDays = eachDayOfRange(range);
+  const weekPlanByWeekStartIso = buildWeeklyShiftPlan({ rangeDays, range, historyStatsByEmployeeId });
 
   const scheduleByDate = {};
 
-  for (const dayDate of monthDays) {
+  for (const dayDate of rangeDays) {
     const isoDate = toISODate(dayDate);
     const weekStartIso = toISODate(startOfWeek(dayDate, { weekStartsOn: 0 }));
     const plan = weekPlanByWeekStartIso[weekStartIso];
@@ -563,7 +677,7 @@ function applyCompOffs({ scheduleByDate }) {
   return { warnings };
 }
 
-export function generateSchedule({ year, monthIndex, leavesByEmployeeId, nationalHolidays, history }) {
+export function generateSchedule({ range, leavesByEmployeeId, nationalHolidays, history }) {
   const nationalHolidaySet = new Set(nationalHolidays);
 
   // Normalize leaves sets
@@ -574,8 +688,7 @@ export function generateSchedule({ year, monthIndex, leavesByEmployeeId, nationa
   }
 
   const scheduleByDate = buildInitialSchedule({
-    year,
-    monthIndex,
+    range,
     leavesByEmployeeId: normalizedLeaves,
     nationalHolidaySet,
     historyStatsByEmployeeId: history?.statsByEmployeeId ?? {},
@@ -585,30 +698,40 @@ export function generateSchedule({ year, monthIndex, leavesByEmployeeId, nationa
 
   const validation = validateSchedule(scheduleByDate);
 
-  const nightCounts = computeNightCounts(scheduleByDate);
+  const monthsInScope = monthsInRange(range);
+
+  const nightCountsByMonth = computeNightCountsByMonth(scheduleByDate);
   const shortNightWarnings = [];
-  for (const employee of EMPLOYEES) {
-    const used = nightCounts[employee.id] ?? 0;
-    if (used > 0 && used < MIN_NIGHT_DAYS_TARGET) {
-      shortNightWarnings.push(
-        `${employee.id}: assigned only ${used} night shift day(s) this month. The scheduler tries to keep night shifts in ~${MIN_NIGHT_DAYS_TARGET}-day weekly chunks, but month edges/leaves/comp-offs can reduce it.`
-      );
-    }
-  }
-
   const nightLimitErrors = [];
-  for (const employee of EMPLOYEES) {
-    const used = nightCounts[employee.id] ?? 0;
-    const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
-    if (used > max) {
-      nightLimitErrors.push(
-        `${employee.id}: assigned ${used} night shifts in this month (limit ${max}). This happened to keep C shift staffed.`
-      );
+
+  for (const monthMeta of monthsInScope) {
+    const mk = monthKeyOf(monthMeta);
+    const counts = nightCountsByMonth[mk] ?? {};
+    for (const employee of EMPLOYEES) {
+      const used = counts[employee.id] ?? 0;
+      if (used > 0 && used < MIN_NIGHT_DAYS_TARGET) {
+        shortNightWarnings.push(
+          `${mk}: ${employee.id} is assigned only ${used} night shift day(s). The scheduler tries to keep night shifts in ~${MIN_NIGHT_DAYS_TARGET}-day weekly chunks, but month edges/leaves/comp-offs can reduce it.`
+        );
+      }
+      const max = MAX_NIGHT_DAYS[employee.role] ?? 12;
+      if (used > max) {
+        nightLimitErrors.push(
+          `${mk}: ${employee.id} is assigned ${used} night shifts (limit ${max}). This happened to keep C shift staffed.`
+        );
+      }
     }
   }
 
-  // Add a top-level warning if user expects A2/B4/C2 but rules imply C>=4 to cover weekend.
+  const rangeNote =
+    monthsInScope.length > 1
+      ? `Schedule generated for ${monthsInScope.length} months (${monthKeyOf(monthsInScope[0])} to ${monthKeyOf(
+          monthsInScope[monthsInScope.length - 1]
+        )}). Night shifts are balanced across months; per-month caps still apply.`
+      : `Schedule generated for ${monthKeyOf(monthsInScope[0] ?? { year: 0, monthIndex: 0 })}.`;
+
   const warnings = [
+    rangeNote,
     ...compOffResult.warnings,
     ...validation.warnings,
     ...shortNightWarnings,
