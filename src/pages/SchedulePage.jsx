@@ -4,7 +4,13 @@ import Layout from "../components/Layout.jsx";
 import Modal from "../components/Modal.jsx";
 import { EMPLOYEES } from "../constants/employees.js";
 import { SHIFT, SHIFT_LABEL, SHIFT_ORDER, TARGET_STAFFING } from "../constants/shifts.js";
-import { eachDayOfMonth, toISODate } from "../utils/date.js";
+import {
+  compareMonth,
+  eachDayOfMonth,
+  formatMonthLabel,
+  monthKeyOf,
+  toISODate,
+} from "../utils/date.js";
 import { useSchedule } from "../state/scheduleStore.js";
 import { getHistoryCsv } from "../utils/historyDb.js";
 import { parseScheduleCsvToScheduleByDate } from "../utils/history.js";
@@ -47,7 +53,19 @@ export default function SchedulePage() {
   const [searchParams] = useSearchParams();
   const historyMonthKey = searchParams.get("history");
 
-  const { month, generated, generate, updateAssignment, canUndo, canRedo, undoEdit, redoEdit } = useSchedule();
+  const {
+    activeMonth: rangeActiveMonth,
+    rangeMonths,
+    setActiveMonthFromInput,
+    stepActiveMonth,
+    generated,
+    generate,
+    updateAssignment,
+    canUndo,
+    canRedo,
+    undoEdit,
+    redoEdit,
+  } = useSchedule();
   const [selectedDate, setSelectedDate] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [issuesOpen, setIssuesOpen] = useState(false);
@@ -90,11 +108,11 @@ export default function SchedulePage() {
   }
 
   const activeMonth = useMemo(() => {
-    if (!historyMonthKey) return month;
+    if (!historyMonthKey) return rangeActiveMonth;
     const m = String(historyMonthKey).match(/^(\d{4})-(\d{2})$/);
-    if (!m) return month;
+    if (!m) return rangeActiveMonth;
     return { year: Number(m[1]), monthIndex: Number(m[2]) - 1 };
-  }, [historyMonthKey, month]);
+  }, [historyMonthKey, rangeActiveMonth]);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,6 +240,8 @@ export default function SchedulePage() {
   const errorCount = generated?.errors?.length ?? 0;
   const warningCount = allWarnings.length;
 
+  const activeMonthKey = monthKeyOf(activeMonth);
+
   const peopleStats = useMemo(() => {
     if (!schedule) return null;
 
@@ -240,6 +260,8 @@ export default function SchedulePage() {
     }
 
     for (const day of Object.values(schedule)) {
+      if (!day.isoDate.startsWith(activeMonthKey)) continue;
+
       for (const shift of SHIFT_ORDER) {
         for (const id of day.assignments?.[shift] ?? []) {
           if (!statsById[id]) {
@@ -292,7 +314,7 @@ export default function SchedulePage() {
     }
 
     return EMPLOYEES.map((e) => statsById[e.id]);
-  }, [schedule]);
+  }, [schedule, activeMonthKey]);
 
   const drillDates = useMemo(() => {
     if (!schedule) return [];
@@ -302,7 +324,9 @@ export default function SchedulePage() {
     const kind = drill.kind;
 
     const out = [];
-    const days = Object.values(schedule).sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+    const days = Object.values(schedule)
+      .filter((day) => day.isoDate.startsWith(activeMonthKey))
+      .sort((a, b) => a.isoDate.localeCompare(b.isoDate));
     for (const day of days) {
       if (kind === "COMPOFF") {
         if ((day.compOffEmployeeIds ?? []).includes(employeeId)) out.push(day.isoDate);
@@ -318,7 +342,7 @@ export default function SchedulePage() {
     }
 
     return out;
-  }, [schedule, drill.employeeId, drill.kind]);
+  }, [schedule, drill.employeeId, drill.kind, activeMonthKey]);
 
   function openDrill(employeeId, kind) {
     setDrill({ employeeId, kind });
@@ -341,6 +365,39 @@ export default function SchedulePage() {
             <p className="muted" style={{ marginTop: 6 }}>
               Shifts: A (7–3), B (3–11), C (11–7). Week starts on Sunday.
             </p>
+            {!readOnly && rangeMonths && rangeMonths.length > 1 ? (
+              <div className="row" style={{ alignItems: "center", gap: 8, marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={compareMonth(activeMonth, rangeMonths[0]) <= 0}
+                  onClick={() => stepActiveMonth(-1)}
+                >
+                  ‹ Prev
+                </button>
+                <select
+                  className="input"
+                  value={monthKeyOf(activeMonth)}
+                  onChange={(e) => setActiveMonthFromInput(e.target.value)}
+                >
+                  {rangeMonths.map((m) => (
+                    <option key={monthKeyOf(m)} value={monthKeyOf(m)}>
+                      {formatMonthLabel(m)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={
+                    compareMonth(activeMonth, rangeMonths[rangeMonths.length - 1]) >= 0
+                  }
+                  onClick={() => stepActiveMonth(1)}
+                >
+                  Next ›
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="actions">
             {readOnly ? (
@@ -732,7 +789,11 @@ export default function SchedulePage() {
           )}
         </Modal>
 
-        <Modal open={peopleOpen} title="People (month summary)" onClose={() => setPeopleOpen(false)}>
+        <Modal
+          open={peopleOpen}
+          title={`People (${formatMonthLabel(activeMonth)})`}
+          onClose={() => setPeopleOpen(false)}
+        >
           {!peopleStats ? (
             <p className="muted" style={{ marginTop: 0 }}>
               Generate a schedule first.

@@ -1,17 +1,33 @@
 import React, { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
-import { buildScheduleCsv, downloadCsv } from "../utils/csv.js";
+import { buildScheduleCsv } from "../utils/csv.js";
 import { useSchedule } from "../state/scheduleStore.js";
+import { formatMonthLabel, monthKeyOf } from "../utils/date.js";
+import { buildScheduleZip, downloadBlob } from "../utils/zipBundle.js";
 
-function monthLabel({ year, monthIndex }) {
-  const mm = String(monthIndex + 1).padStart(2, "0");
-  return `${year}-${mm}`;
+function sliceScheduleByMonth(scheduleByDate, monthKey) {
+  const out = {};
+  for (const [iso, day] of Object.entries(scheduleByDate ?? {})) {
+    if (iso.startsWith(monthKey)) out[iso] = day;
+  }
+  return out;
+}
+
+function filterMessagesForMonth(messages, monthKey) {
+  if (!messages) return [];
+  // Messages that carry a YYYY-MM-DD or YYYY-MM prefix for this month go in.
+  // Messages without any such token are range-level and included for every month.
+  return messages.filter((m) => {
+    const hasAnyMonthRef = /\b\d{4}-\d{2}\b/.test(m);
+    if (!hasAnyMonthRef) return true;
+    return m.includes(monthKey);
+  });
 }
 
 export default function ExportPage() {
   const nav = useNavigate();
-  const { month, generated } = useSchedule();
+  const { range, rangeMonths, generated } = useSchedule();
 
   const canDownload = Boolean(generated.scheduleByDate);
 
@@ -25,17 +41,26 @@ export default function ExportPage() {
     return { warningCount, errorCount };
   }, [generated]);
 
+  const rangeLabel =
+    rangeMonths && rangeMonths.length > 0
+      ? `${monthKeyOf(rangeMonths[0])} to ${monthKeyOf(rangeMonths[rangeMonths.length - 1])}`
+      : "";
+
   return (
     <Layout
       title="Download"
-      subtitle="Review the final schedule summary and export to CSV."
+      subtitle="Review the final schedule summary and export to a ZIP of per-month CSVs."
     >
       <section className="panel">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div>
-            <div className="h">Schedule for {monthLabel(month)}</div>
+            <div className="h">
+              Schedule for {formatMonthLabel(range.start)}
+              {rangeMonths && rangeMonths.length > 1 ? ` – ${formatMonthLabel(range.end)}` : ""}
+            </div>
             <p className="muted" style={{ marginTop: 6 }}>
-              Warnings: {summary.warningCount} · Errors: {summary.errorCount}
+              Months in bundle: {rangeMonths?.length ?? 0} · Warnings: {summary.warningCount} · Errors:{" "}
+              {summary.errorCount}
             </p>
           </div>
           <div className="actions">
@@ -48,18 +73,32 @@ export default function ExportPage() {
               onClick={async () => {
                 if (!generated.scheduleByDate) return;
 
-                const { csvText, monthLabel } = buildScheduleCsv({
-                  scheduleByDate: generated.scheduleByDate,
-                  year: month.year,
-                  monthIndex: month.monthIndex,
-                  warnings: generated.warnings,
-                  errors: generated.errors,
-                });
+                const perMonthCsvs = [];
+                for (const m of rangeMonths ?? []) {
+                  const mk = monthKeyOf(m);
+                  const sliced = sliceScheduleByMonth(generated.scheduleByDate, mk);
+                  if (Object.keys(sliced).length === 0) continue;
+                  const { csvText } = buildScheduleCsv({
+                    scheduleByDate: sliced,
+                    year: m.year,
+                    monthIndex: m.monthIndex,
+                    warnings: filterMessagesForMonth(generated.warnings, mk),
+                    errors: filterMessagesForMonth(generated.errors, mk),
+                  });
+                  perMonthCsvs.push({ monthKey: mk, csvText });
+                }
 
-                downloadCsv({ csvText, fileName: `Shift-Schedule-${monthLabel}.csv` });
+                const blob = await buildScheduleZip({ perMonthCsvs, rangeLabel });
+                const fileName =
+                  perMonthCsvs.length === 1
+                    ? `Shift-Schedule-${perMonthCsvs[0].monthKey}.zip`
+                    : `Shift-Schedule-${monthKeyOf(rangeMonths[0])}_to_${monthKeyOf(
+                        rangeMonths[rangeMonths.length - 1]
+                      )}.zip`;
+                downloadBlob(blob, fileName);
               }}
             >
-              Download CSV
+              Download ZIP
             </button>
           </div>
         </div>
